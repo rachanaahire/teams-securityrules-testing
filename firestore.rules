@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+   match /databases/{database}/documents {
+
+     // my functions
+     function isSignedIn() {
+       return request.auth != null;
+      }
+
+     function isManager(pid){
+       return request.auth.uid in (get(/databases/$(database)/documents/projects/$(pid)).data.manager);
+     }
+
+     function isOwner(pid){
+       return request.auth.uid in (get(/databases/$(database)/documents/projects/$(pid)).data.owner);
+     }
+
+     function isEditor(pid){
+       return request.auth.uid in (get(/databases/$(database)/documents/projects/$(pid)).data.editor);
+     }
+
+     match /{document=**} {
+        allow read, write: if false;
+     }
+
+     match /projects/{projectId}{
+       allow read: if isSignedIn();       
+       allow create: if isSignedIn();
+       allow update: if (isManager(projectId) || isOwner(projectId));
+       allow delete: if isOwner(projectId);
+
+       match /contents/{contentId}{
+         allow read: if isSignedIn();
+         allow create: if isManager(projectId) || isOwner(projectId) || isEditor(projectId);
+         allow update: if (isManager(projectId) || isOwner(projectId) || isEditor(projectId)) && resource.data.author == request.auth.uid;
+         allow delete: if isManager(projectId) || isOwner(projectId) || resource.data.author == request.auth.uid
+       }
+     }
+
+     match /users/{userId}{
+       allow read: if isSignedIn();
+       allow write: if (request.auth.uid == userId);
+     }
+   }
+}
